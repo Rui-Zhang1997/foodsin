@@ -1,0 +1,5 @@
+keys: (contains all api keys)
+  SODA: <SODA API KEY>
+db: (database configuration)
+  username: <db username>
+  password: <db password>

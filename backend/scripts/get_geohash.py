@@ -1,54 +1,65 @@
 from models import Restaurant, new_session
-import geohash as geo
+import geohash
 import requests as req
 import json, yaml
+import asyncio
 import re
 
 with open('config.yaml') as f:
-    api_keys = yaml.load(f)['keys']
+    config = yaml.load(f)
+api_keys = config['keys']
 
 s = new_session()
 print(len(s.query(Restaurant).all()))
 
 restaurants = {(r[0], r[3]): (r[1], r[2]) for r in s.query(Restaurant.__table__.c.id, \
     Restaurant.__table__.c.street, Restaurant.__table__.c.zipcode, \
-    Restaurant.__table__.c.dba).all()}
-
-print("Rendering geohash for %s restaurants" % len(restaurants))
+    Restaurant.__table__.c.dba).filter(Restaurant.geohash==None).filter(Restaurant.borough==4).all()}
 
 GEOCODING_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
-addr_ll = {}
-restaurant_id_names = {}
-restaurant_geolocations = {}
-for dba, addr in restaurants.items():
-    restaurant_id_names[dba[0]] = dba[1]
-    key = '%s,%s' % addr
-    if key not in addr_ll:
-        print("GETTING", key)
-        r = req.get(GEOCODING_URL, params={'address': key, 'key': api_keys['google']}).json()
-        addr_ll[key] = r['results'][0]['geometry']['location']
-    restaurant_geolocations[dba[0]] = (addr_ll[key]['lat'], addr_ll[key]['lng'])
+def get_found_geolocations():
+    try:
+        with open(config['files']['geolocation']) as f:
+            geometrics = json.load(f)
+        return geometrics
+    except json.decoder.JSONDecodeError:
+        return []
 
-with open('geolocations.json', 'w') as f:
-    json.data(addr_ll, f)
+found_addrs = [addr['key'] for addr in get_found_geolocations()]
+addrs = list(set([dba for e, dba in restaurants.items() if ('%s+%s' % dba) not in found_addrs ]))
 
-PLACES_URL = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json?"
-fields = {'fields': 'name,formatted_address,geometry', 'inputtype': 'textquery', 'key': api_keys['google']}
-for r_id, name in restaurant_id_names.items():
-    radius = 100
-    print("Getting %s @ %s" % (name, radius))
-    while True:
-        params = {**fields, **{'input': re.sub('\W+', '', name), 'locationbias': 'circle:%s@%s,%s' % (radius, restaurant_geolocations[r_id][0], restaurant_geolocations[r_id][1])}}
-        r = req.get(PLACES_URL, params=params).json()
-        if len(r['candidates']) == 0:
-            radius *= 1.25
+async def get_all_lls():
+    loop = asyncio.get_event_loop()
+    print("Getting futures...")
+    futures = [loop.run_in_executor(None, req.get, GEOCODING_URL, \
+        {'address': '%s+%s' % addr, 'key': api_keys['google']}) for addr in addrs]
+    print("Blocking...")
+    responses = [await future for future in futures]
+    get_data = lambda key, r: {'key': key, 'location': r.json()['results'][0]}
+    valid_stmts = []
+    for addr, r in zip(addrs, responses):
+        try:
+            key = '%s+%s' % addr
+            valid_stmts.append(get_data(key, r))
+        except:
             continue
-        restaurant_geolocations[r_id] = r['candidates'][0]['geometry']['location']
-        break
+    return valid_stmts
 
-s = new_session()
-for r_id, latlng in restaurant_geolocations.items():
-    s.query(Restaurant).filter_by(id=r_id).update({'geohash': geo.encode(latlng['lat'], latlng['lng'])})
-s.commit()
-print("Completed")
+def log_geolocations():
+    loop = asyncio.get_event_loop()
+    locations = get_found_geolocations()
+    with open("geolocations.json", 'w') as f:
+        json.dump(locations + loop.run_until_complete(get_all_lls()), f)
+
+def load_geohashes(geos):
+    for geo in geos:
+        street, zipcode = geo['key'].split('+')
+        location = geo['location']['geometry']['location']
+        s.query(Restaurant).filter(Restaurant.street==street and Restaurant.zipcode==zipcode). \
+            update({'geohash': geohash.encode(location['lat'], location['lng'])})
+    s.commit()
+
+load_geohashes(get_found_geolocations())
+
+print(get_found_geolocations())

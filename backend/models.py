@@ -16,20 +16,23 @@ engine = create_engine('mysql+pymysql://%s:%s@localhost:3306/health?charset=utf8
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
 
+class Serializer:
+    def serialize(self):
+        return {k: v for k, v in self.__dict__.items() if k in self.__table__.columns}
 
-class Borough(Base):
+class Borough(Base, Serializer):
     __tablename__ = 'borough'
     id = Column(Integer, primary_key=True)
     borough = Column(String(length=32), unique=True)
 
 
-class ViolationCode(Base):
+class ViolationCode(Base, Serializer):
     __tablename__ = 'violation_code'
     id = Column(Integer, primary_key=True)
     code = Column(String(length=8), unique=True)
 
 
-class Restaurant(Base):
+class Restaurant(Base, Serializer):
     __tablename__ = 'restaurant'
     id = Column(Integer, primary_key=True)
     camis = Column(String(length=16), unique=True)
@@ -48,7 +51,7 @@ restaurant_borough_idx = Index('restaurant_borough_idx', Restaurant.__table__.c.
 restaurant_zipcode_idx = Index('restaurant_zipcode_idx', Restaurant.__table__.c.zipcode)
 restaurant_geohash_idx = Index('restaurant_geohash_idx', Restaurant.__table__.c.geohash)
 
-class Inspection(Base):
+class Inspection(Base, Serializer):
     __tablename__ = 'inspection'
     id = Column(Integer, primary_key=True)
     restaurant = Column(Integer, ForeignKey('restaurant.id'))
@@ -90,3 +93,6 @@ Base.metadata.create_all(engine)
 
 def new_session():
     return Session()
+
+def serialize(obj_list):
+    return [obj.serialize() for obj in obj_list]

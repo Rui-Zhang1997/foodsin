@@ -1,0 +1,44 @@
+html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0; }
+
+body, #root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-flow: column;
+    align-items: center;
+    justify-content: center; }
+
+#base {
+    width: 80%;
+    height: 80%;
+    display: flex;
+    flex-flow: column; }
+
+#header {
+    display: flex;
+    flex-flow: row;
+    height: 100px;
+    align-items: center;
+    justify-content: center;
+    span {
+        display: inline;
+        width: 150px;
+        margin-left: 10px; margin-right: 10px; }
+    p {
+        display: flex;
+        flex-flow: row;
+        align-items: center; }
+}
+
+.select-options {
+    display: none; }
+
+.text-dropdown:hover {
+    .select-options {
+        display: normal;
+    }
+}

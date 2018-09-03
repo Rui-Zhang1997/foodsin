@@ -1,0 +1,159 @@
+import React, { Component } from 'react';
+import logo from './logo.svg';
+import axios from 'axios';
+import { BASE_URL } from './config';
+import * as gh from 'ngeohash';
+import * as R from 'ramda';
+import * as d3 from 'd3';
+import * as stat from "simple-statistics";
+import { Vector, Matrix } from 'vectorious';
+import './App.css';
+
+const print = console.log;
+const SVG_WIDTH = 800;
+const SVG_HEIGHT = 800;
+
+const getMapping = (c, avg, olat, tlat, olng, tlng, pt) => {
+    // console.log("SD", (pt[0] - avg[0]) / olat, (pt[1] - avg[1]) / olng);
+    return [
+        c[0] + ((pt[0] - avg[0]) / olat) * tlat,
+        c[1] + ((pt[1] - avg[1]) / olng) * tlng];
+}
+
+const distance = (p1, p2) => {
+    return Math.sqrt( Math.pow(p1[0]-p2[0], 2)+Math.pow(p1[1]-p2[1], 2));
+}
+
+const getPointsInBounds = (points, devLimit) => {
+    let lats = R.map(p => p.ll[0], points), lngs = R.map(p => p.ll[1], points);
+    let c = [stat.mean(lats), stat.mean(lngs)];
+    let d = [stat.standardDeviation(lats), stat.standardDeviation(lngs)];
+    return R.filter(p => {
+        return (p.ll[0] > (c[0]-devLimit*d[0])) && (p.ll[0] < (c[0]+devLimit*d[0])) &&
+               (p.ll[1] > (c[1]-devLimit*d[1])) && (p.ll[1] < (c[1]+devLimit*d[1]));
+    }, points);
+}
+
+const getInspectionResults = (ids) => {
+    return axios.get(BASE_URL + '/inspection', {
+        params: {
+            ids: ids.join(',')
+        }
+    });
+}
+
+class App extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            locations: [],
+            needToFetch: true
+        };
+    }
+
+    getRestaurantsInBorough(borough) {
+        axios
+            .get(BASE_URL + `/restaurant/${borough}`)
+            .then(res => {
+                this.setState({
+                    locations: R.map(p => {
+                        let l = gh.decode(p.geohash);
+                        p['ll'] = [l.latitude, l.longitude];
+                        return p;
+                    }, res.data.slice(0,2000)), needToFetch: false
+                });
+        });
+    }
+    
+    addAllLocations() {
+        if (this.state.needToFetch) {
+            this.getRestaurantsInBorough(4);
+        } else {
+            let r0 = -1 * Math.PI * (2 / 3);
+            let rotM = new Matrix([[Math.cos(r0), -1 * Math.sin(r0)], [Math.sin(r0), Math.cos(r0)]]);
+            let points = getPointsInBounds(this.state.locations, 1);
+            let lats = R.sort((a, b) => a - b, R.map(p => p.ll[0], points));
+            let lngs = R.sort((a, b) => a - b, R.map(p => p.ll[1], points));
+            // console.log(lats, lngs);
+            const mapCoords = R.partial(getMapping,
+                [[SVG_WIDTH/2, SVG_HEIGHT/2], [R.mean(lats), R.mean(lngs)],
+                lats[lats.length-1]-lats[0], SVG_WIDTH-200, lngs[lngs.length-1]-lngs[0], SVG_HEIGHT-200]);
+            
+            // RENDERING
+            const svg = d3.select('svg');
+            const centerOffsetM = new Matrix([[SVG_WIDTH / 2], [SVG_HEIGHT / 2]]);
+            let logged = false;
+            let unique = {};
+            for (let p of points) {
+                unique[p.ll] = true;
+            }
+            getInspectionResults(R.map(p => p.id, points)).then(res => { 
+                console.log("LEN", res.data.length);
+                let resultSum = {};
+                R.forEach(i => {
+                    if (!resultSum.hasOwnProperty(i.restaurant)) {
+                        resultSum[i.restaurant] = [0, 0, 0];
+                    }
+                    switch (i.critical_flag) {
+                        case 'Not Applicable':
+                            resultSum[i.restaurant][0] += 1;
+                            break;
+                        case 'Not Critical':
+                            resultSum[i.restaurant][1] += 1;
+                            break;
+                        case 'Critical':
+                            resultSum[i.restaurant][2] += 1;
+                            break;
+                    }
+                }, res.data);
+                console.log(resultSum);
+                const calculateFill = (score) => {
+                    if (score < 25) return "#74DF00";
+                    if (score < 50) return "#FFFF00";
+                    if (score < 75) return "#FF8000";
+                    return "#FF0000";
+                };
+                R.forEach(p => {
+                    let c = mapCoords(p.ll);
+                    if (c !== undefined) {
+                        let locM = new Matrix([[c[0]], [c[1]]]);
+                        let c_ = rotM.multiply(locM.subtract(centerOffsetM)).add(centerOffsetM);
+                        if (!logged) { console.log(c_); logged = true ; }
+                        let score = resultSum[p.id][1] + resultSum[p.id][2] * 2;
+                        svg
+                            .append('circle')
+                            .attr('cx', c_.get(0, 0))
+                            .attr('cy', c_.get(1, 0))
+                            .attr('r', 5)
+                            .attr('fill', calculateFill(score));
+                    }
+                }, points);
+            });
+        }
+    }
+
+    render() {
+        if (this.state.needToFetch) {
+            this.getRestaurantsInBorough(4);
+        } else {
+            this.addAllLocations();
+        }
+        return (
+        <div id='content'>
+            <div id='sidebar'>
+                <div id='title'> <p> NYC Restaurant Inspection Results </p> </div>
+                <div id='description'>
+                    <p>
+                        The following is a visualized representation of the restaurant health ratings
+                        given by the New York Department of Health and Mental Hygiene (DOHMH).
+                    </p>
+                </div>
+            </div>
+            <div class='v-separator' />
+            <svg width={`${SVG_WIDTH}px`} height={`${SVG_HEIGHT}px`}></svg>
+        </div>
+        );
+    }
+}
+
+export default App;

@@ -59,6 +59,7 @@ class Inspection(Base, Serializer):
     violation_code = Column(Integer, ForeignKey('violation_code.id'))
     violation_description = Column(Text)
     score = Column(Integer)
+    grade = Column(String(length=16))
     inspection_date = Column(DateTime)
     inspection_type = Column(String(length=128))
     critical_flag = Column(String(length=16))
@@ -66,11 +67,18 @@ class Inspection(Base, Serializer):
     violation_code_rel = relationship('ViolationCode')
 
 inspection_code_index = Index('inspection_code_idx', Inspection.__table__.c.violation_code)
+inspection_grade_index = Index('inspection_grade_idx', Inspection.__table__.c.grade)
 inspection_score_index = Index('inspection_score_idx', Inspection.__table__.c.score)
 inspection_restaurant_index = Index('inspection_restaruant_idx', Inspection.__table__.c.restaurant)
 inspection_date_idx = Index('inspection_date_idx', Inspection.__table__.c.inspection_date)
 inspection_flag_idx = Index('inspection_flag_idx', Inspection.__table__.c.critical_flag)
 inspection_type_idx = Index('inspection_type_idx', Inspection.__table__.c.inspection_type)
+
+class Tables:
+    inspection = Inspection.__table__
+    restaurant = Restaurant.__table__
+    violation_code = ViolationCode.__table__
+    borough = Borough.__table__
 
 class Collection:
     def __init__(self, model, pkfn):

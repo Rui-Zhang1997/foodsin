@@ -1,1 +1,1 @@
-from scripts import get_geohash
+from data import import_data

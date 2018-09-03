@@ -1,5 +1,5 @@
-from flask import Flask, jsonify
-from models import Restaurant, Session, serialize
+from flask import Flask, jsonify, request
+from models import Restaurant, Inspection, Session, serialize
 
 app = Flask(__name__)
 
@@ -15,5 +15,16 @@ def get_restaurants(borough):
     resp.headers['Access-Control-Allow-Origin'] = '*'
     return resp
 
+@app.route('/inspection')
+def get_inspection():
+    ids = request.args.get('ids').split(',')
+    s = Session()
+    ret = serialize(s.query(Inspection).filter(Inspection.restaurant.in_(ids)).order_by(Inspection.restaurant.asc()))
+    resp = jsonify(ret)
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
+
 if __name__ == '__main__':
     app.run(debug=True)
+
+

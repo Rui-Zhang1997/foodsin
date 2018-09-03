@@ -1,111 +1,59 @@
 import React, { Component } from 'react';
-import logo from './logo.svg';
 import axios from 'axios';
 import { BASE_URL } from './config';
-import * as gh from 'ngeohash';
 import * as R from 'ramda';
-import * as d3 from 'd3';
-import * as stat from "simple-statistics";
-import { Vector, Matrix } from 'vectorious';
 import './App.css';
-
-const print = console.log;
-const SVG_WIDTH = 1000;
-const SVG_HEIGHT = 1000;
-
-const getMapping = (c, avg, olat, tlat, olng, tlng, pt) => {
-    // console.log("SD", (pt[0] - avg[0]) / olat, (pt[1] - avg[1]) / olng);
-    return [
-        c[0] + ((pt[0] - avg[0]) / olat) * tlat,
-        c[1] + ((pt[1] - avg[1]) / olng) * tlng];
-}
-
-const distance = (p1, p2) => {
-    return Math.sqrt( Math.pow(p1[0]-p2[0], 2)+Math.pow(p1[1]-p2[1], 2));
-}
-
-const getPointsInBounds = (points, devLimit) => {
-    let lats = R.map(p => p.ll[0], points), lngs = R.map(p => p.ll[1], points);
-    let center = [stat.mean(lats), stat.mean(lngs)];
-    let distances = R.map(p => distance(p.ll, center), points);
-    let avg = stat.mean(distances), stddev = stat.standardDeviation(distances);
-    return R.filter(p => {
-        let d = distance(p.ll, center);
-        return (d > avg+stddev*devLimit*-1) && (d < avg+stddev*devLimit);
-    }, points);
-}
+import * as $ from 'jquery';
+import SlideView from './Components/SlideView';
+import OverviewPage from './Pages/OverviewPage';
+import LetterGradeDistributionPage from './Pages/LetterGradeDistributionPage';
+import ByCuisinePage from './Pages/ByCuisinePage';
+import ViolationsPage from './Pages/ViolationsPage';
 
 class App extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            locations: [],
-            needToFetch: true
+            page: 1
         };
     }
+    
+    switchPage = (page) => {
+        if (this.state.page + page > 0 && this.state.page + page < 5) {
+            this.setState({ page: this.state.page + page });
+        }
+    }
 
-    getRestaurantsInBorough(borough) {
-        axios
-            .get(BASE_URL + `/restaurant/${borough}`)
-            .then(res => {
-                this.setState({
-                    locations: R.map(p => {
-                        let l = gh.decode(p.geohash);
-                        p['ll'] = [l.latitude, l.longitude];
-                        return p;
-                    }, res.data.slice(0,2000)), needToFetch: false
-                });
+    componentDidMount () {
+        $('.text-dropdown').click((e) => {
+            console.log($(this));
         });
     }
-    
-    addAllLocations() {
-        if (this.state.needToFetch) {
-            this.getRestaurantsInBorough(4);
-        } else {
-            let r0 = Math.PI / 100;
-            let rotM = new Matrix([[Math.cos(r0), -1 * Math.sin(r0)], [Math.sin(r0), Math.cos(r0)]]);
-            let points = getPointsInBounds(this.state.locations, 1);
-            let lats = R.sort((a, b) => a - b, R.map(p => p.ll[0], points));
-            let lngs = R.sort((a, b) => a - b, R.map(p => p.ll[1], points));
-            // console.log(lats, lngs);
-            const mapCoords = R.partial(getMapping,
-                [[SVG_WIDTH/2, SVG_HEIGHT/2], [R.median(lats), R.median(lngs)],
-                lats[lats.length-1]-lats[0], SVG_WIDTH, lngs[lngs.length-1]-lngs[0], SVG_HEIGHT]);
-            
-            // RENDERING
-            const svg = d3.select('svg');
-            R.forEach(p => {
-                let c = mapCoords(p.ll);
-                if (c !== undefined) {
-                    let c_ = rotM.multiply(new Matrix([[c[0]], [c[1]]]));
-                    svg
-                        .append('circle')
-                        .attr('cx', c[0])
-                        .attr('cy', c[1])
-                        .attr('r', 5)
-                        .attr('fill', '#555555');
-                }
-                /*    
-                svg
-                    .append('text')
-                    .attr('x', c.first)
-                    .attr('y', c.second)
-                    .attr('font-size', 8)
-                    .text(p.name);*/
-            }, points);
+
+    getPage() {
+        console.log("PAGE STATE", this.state.page);
+        switch(this.state.page) {
+            case 1:
+                return <OverviewPage changepage={this.switchPage} />;
+            case 2:
+                return <LetterGradeDistributionPage changepage={this.switchPage} />;
+            case 3:
+                return <ByCuisinePage changepage={this.switchPage} />;
+            case 4:
+                return <ViolationsPage changepage={this.switchPage} />;
         }
+        return (<div />);
     }
 
     render() {
-        if (this.state.needToFetch) {
-            this.getRestaurantsInBorough(4);
-        } else {
-            this.addAllLocations();
-        }
-        return (
-            <svg width={`${SVG_WIDTH}px`} height={`${SVG_HEIGHT}px`}></svg>
-        );
-    }
+    return (
+        <div id='base'>
+            <div id='header'>
+                <p className='title'> Visual of Health Reports for Manhatten Restaurants </p>
+            </div>
+            {this.getPage()}
+        </div>
+    ); }
 }
 
 export default App;

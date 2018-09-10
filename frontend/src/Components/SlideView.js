@@ -20,10 +20,10 @@ class SlideView extends Component {
     render() { return (
         <div className='slide-view content'>
             <div className='panel' id='text-summary'>
-                <div>
+                <div id='textsummarymain'>
                     {this.props.textsummary}
                 </div>
-                <div>
+                <div id='slide-control'>
                     <div className='pagemod' id='pm-prev' pagemod={-1}> Previous </div>
                     <div className='pagemod' id='pm-next' pagemod={1}> Next </div>
                 </div>

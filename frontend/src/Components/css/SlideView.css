@@ -19,4 +19,19 @@
   margin-right: 10px;
   border-right: 1px solid #999999; }
 
+#textsummarymain {
+  height: 100%; }
+
+#slide-control {
+  display: flex;
+  flex-flow: row;
+  align-items: center;
+  justify-content: center; }
+  #slide-control div {
+    margin-left: 10px;
+    margin-right: 10px; }
+  #slide-control div:hover {
+    cursor: pointer;
+    color: #cccccc; }
+
 /*# sourceMappingURL=SlideView.css.map */
